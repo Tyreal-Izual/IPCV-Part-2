@@ -468,6 +468,54 @@ if __name__ == '__main__':
 
     Write your code here
     '''
+    # K is the Open3D PinholeCameraIntrinsic object
+
+    # Extract the 3x3 intrinsic matrix from the Open3D PinholeCameraIntrinsic object
+    K_matrix = np.array(K.intrinsic_matrix).reshape((3, 3))
+
+    reconstructed_centers = []
+
+    for i, j in good_pairs:  # Loop through the good pairs obtained from Task 5
+        # Get the corresponding circle centers
+        pL = centers1[i]
+        pR = centers0[j]
+
+        # Convert image points to normalized device coordinates
+        pL_n = np.linalg.inv(K_matrix) @ np.array([pL[0], pL[1], 1])
+        pR_n = np.linalg.inv(K_matrix) @ np.array([pR[0], pR[1], 1])
+
+        # Get rotation and translation from camera 1 to camera 0
+        R = H0_wc[:3, :3].T  # Transpose of rotation matrix
+        T = H0_wc[:3, 3]  # Translation vector
+
+        # Compute cross product
+        pL_cross_pR = np.cross(pL_n, R @ pR_n)
+
+        # Form the linear system Ax = 0
+        A = np.array([
+            pL_n,  # a*pL
+            -R.T @ pR_n,  # -b*R^T*pR
+            -pL_cross_pR  # -c*(pL x R^T*pR)
+        ]).T
+
+        b = T  # T vector
+
+        # Solve the linear system using least squares
+        x, residuals, rank, s = np.linalg.lstsq(A, b, rcond=None)
+
+        # a, b, and c are the components of the solution x
+        a, b, c = x
+
+        # Reconstruct the 3D point
+        X = a * pL_n - c * pL_cross_pR
+
+        # Append the reconstructed 3D center to the list
+        reconstructed_centers.append(X)
+
+    # Print or process the reconstructed centers
+    for center in reconstructed_centers:
+        print("Reconstructed 3D center:", center)
+
     ###################################
 
 
