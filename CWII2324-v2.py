@@ -433,31 +433,32 @@ if __name__ == '__main__':
     circles0 = detect_circles(img0)
     circles1 = detect_circles(img1)
 
-    correspondences = []
-    for circle1 in circles1[0, :]:
-        # Circle center in homogeneous coordinates
-        center1 = np.array([circle1[0], circle1[1], 1])
+    # Extract circle centers
+    centers0 = np.array([(x, y) for (x, y, r) in circles0[0, :]])
+    centers1 = np.array([(x, y) for (x, y, r) in circles1[0, :]])
 
-        # Compute the epipolar line in view0
-        epipolar_line = np.dot(F, center1)
+    # Prepare data for RANSAC
+    pairs = []
+    for i, center1 in enumerate(centers1):
+        for j, center0 in enumerate(centers0):
+            pairs.append((i, j))
 
-        # Find the circle in view0 that is closest to this line
-        best_circle0 = None
-        min_distance = float('inf')
-        for circle0 in circles0[0, :]:
-            center0 = np.array([circle0[0], circle0[1], 1])
-            distance = abs(np.dot(epipolar_line, center0)) / np.linalg.norm(epipolar_line[:2])
-            if distance < min_distance:
-                min_distance = distance
-                best_circle0 = circle0
+    # Run RANSAC to find the best correspondences
+    if len(pairs) >= 4:
+        src_pts = np.float32([centers1[i] for (i, j) in pairs]).reshape(-1, 1, 2)
+        dst_pts = np.float32([centers0[j] for (i, j) in pairs]).reshape(-1, 1, 2)
 
-        # Add to correspondences if a valid match is found
-        if best_circle0 is not None:
-            correspondences.append((circle1, best_circle0))
+        # Using RANSAC to find the homography matrix
+        H, status = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
 
-    # Optionally, you can print or visualize the correspondences
-    for c1, c0 in correspondences:
-        print(f"Circle in view1: {c1}, Corresponding circle in view0: {c0}")
+        # Filter out the pairs using the status output
+        good_pairs = [(pairs[i][0], pairs[i][1]) for i in range(len(pairs)) if status[i]]
+
+        # Print or process the good pairs
+        for i, j in good_pairs:
+            print(f"Circle in view1: {circles1[0, i]}, Corresponding circle in view0: {circles0[0, j]}")
+    else:
+        print("Not enough pairs for RANSAC.")
     ###################################
 
 
