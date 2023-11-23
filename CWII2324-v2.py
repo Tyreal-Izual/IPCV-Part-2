@@ -108,6 +108,12 @@ if __name__ == '__main__':
                         help='open up another visualiser to visualise centres')
     parser.add_argument('--coords', dest='bCoords', action='store_true')
 
+    parser.add_argument('--display_epilines', dest='bEpilines', action='store_true',
+                        help='Display epipolar lines in the 3D visualizer')
+
+    parser.add_argument('--display_centers', dest='bDisplayCenters', action='store_true',
+                        help='Display estimated and ground truth centers in the 3D visualizer')
+
     args = parser.parse_args()
 
     if args.num<=0:
@@ -245,6 +251,8 @@ if __name__ == '__main__':
     oy=img_height/2-0.5
     K = o3d.camera.PinholeCameraIntrinsic(img_width,img_height,f,f,ox,oy)
 
+    # Here I moved the following original Rendering Code for 3-D  window, to the bottom of the main function. To makesure every rendering that I wrote below in the tasks is visiable in the 3D screen.
+
     # Rendering RGB-D frames given camera poses
     # create visualiser and get rendered views
     cam = o3d.camera.PinholeCameraParameters()
@@ -283,7 +291,7 @@ if __name__ == '__main__':
         vis.run()
         vis.destroy_window()
 
-    
+
     ###################################
     '''
     Task 3: Circle detection
@@ -336,22 +344,29 @@ if __name__ == '__main__':
 
     # a) Epipolar line
     pt0 = -np.matmul(np.linalg.inv(H0_wc[:3,:3]),H0_wc[:3,3])
+    if args.bEpilines:
+        # Loop through each sphere center to draw epipolar lines
+        for pt1 in GT_cents:
+            pt1 = pt1[:3]  # Extract the 3-D vector
 
-    # Loop through each sphere center to draw epipolar lines
-    for pt1 in GT_cents:
-        pt1 = pt1[:3]  # Extract the 3-D vector
+            # these define the e+0nd points of the line
+            end_pts = [pt0[:], pt1[:]]
+            # use open3D LineSet to create line
+            lines = [[0, 1]]
+            colors = [[1, 0, 0] for i in range(len(lines))]
+            line_set = o3d.geometry.LineSet()
+            line_set.points = o3d.utility.Vector3dVector(end_pts)
+            line_set.lines = o3d.utility.Vector2iVector(lines)
+            line_set.colors = o3d.utility.Vector3dVector(colors)
+            obj_meshes.append(line_set)
 
-        # these define the e+0nd points of the line
-        end_pts = [pt0[:], pt1[:]]
-        # use open3D LineSet to create line
-        lines = [[0, 1]]
-        colors = [[1, 0, 0] for i in range(len(lines))]
-        line_set = o3d.geometry.LineSet()
-        line_set.points = o3d.utility.Vector3dVector(end_pts)
-        line_set.lines = o3d.utility.Vector2iVector(lines)
-        line_set.colors = o3d.utility.Vector3dVector(colors)
-        obj_meshes.append(line_set)
-
+    if args.bCentre or args.bEpilines:
+        vis = o3d.visualization.Visualizer()
+        vis.create_window(width=640, height=480, left=0, top=0)
+        for m in obj_meshes:
+            vis.add_geometry(m)
+        vis.run()
+        vis.destroy_window()
         # b) Extend epipolar line in the image
         # stack 3-D line points and convert to camera 1 coordinates
     img = cv2.imread('view1.png')
@@ -525,6 +540,30 @@ if __name__ == '__main__':
 
     Write your code here
     '''
+    # Create a point cloud for estimated sphere centres
+    pcd_estimated_cents = o3d.geometry.PointCloud()
+    pcd_estimated_cents.points = o3d.utility.Vector3dVector(np.array(reconstructed_centers))
+    pcd_estimated_cents.paint_uniform_color([0., 0., 1.])  # Blue color for estimated centres
+
+    # Add both point clouds (GT and estimated) to the visualizer
+    if args.bDisplayCenters:
+        vis = o3d.visualization.Visualizer()
+        vis.create_window(width=640, height=480, left=0, top=0)
+        for m in [obj_meshes[0], pcd_GTcents, pcd_estimated_cents]:
+            vis.add_geometry(m)
+        vis.run()
+        vis.destroy_window()
+
+    # Compute errors in sphere centre estimates
+    errors = []
+    for gt_center, est_center in zip(GT_cents, reconstructed_centers):
+        error = np.linalg.norm(np.array(gt_center[:3]) - np.array(est_center))
+        errors.append(error)
+
+    # Print or process the errors
+    for error in errors:
+        print("Error in estimated center:", error)
+
     ###################################
 
 
@@ -551,4 +590,4 @@ if __name__ == '__main__':
 
     Write your code here:
     '''
-    ###################################
+    ##################################
