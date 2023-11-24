@@ -303,6 +303,7 @@ if __name__ == '__main__':
     # Detect circles in both images
     circles0 = detect_circles(img0)
     circles1 = detect_circles(img1)
+    detected_centers0 = []
 
     # Process and display the results
     if circles0 is not None:
@@ -312,6 +313,7 @@ if __name__ == '__main__':
             cv2.circle(img0, (i[0], i[1]), i[2], (0, 255, 0), 2)
             # Draw the center of the circle
             cv2.circle(img0, (i[0], i[1]), 2, (0, 0, 255), 3)
+            detected_centers0.append(np.array([i[0], i[1], 1]))
 
     if circles1 is not None:
         circles1 = np.uint16(np.around(circles1))
@@ -337,102 +339,90 @@ if __name__ == '__main__':
     
     Write your code here
     '''
-    # Define matrices for coordinate conversion
-    sx = sy = 1  # Pixel sizes in Open3D are both 1
-    Mpi = np.array([[sx, 0, -ox / f], [0, sy, -oy / f], [0, 0, 1]])
-    Mip = np.linalg.inv(Mpi)
+    # # Define matrices for coordinate conversion
+    # sx = sy = 1  # Pixel sizes in Open3D are both 1
+    # Mpi = np.array([[sx, 0, -ox / f], [0, sy, -oy / f], [0, 0, 1]])
+    # Mip = np.linalg.inv(Mpi)
+    #
+    # # get coordinate transformation from cam1 to cam0
+    # H_10 = np.matmul(H0_wc, np.linalg.inv(H1_wc))
+    #
+    # # this gives P0=R10*P1+T10
+    # # hence P1=R10^T(P0-T10)
+    # R = H_10[:3, :3].T  # R10^T
+    # T = H_10[:3, 3]  # T10
+    #
+    # # form the cross pdt matrix S from T
+    # S = np.array([
+    #     [0, -T[2], T[1]],
+    #     [T[2], 0, -T[0]],
+    #     [-T[1], T[0], 0]
+    # ])
+    #
+    # # the essential matrix
+    # E = np.matmul(R, S)
+    # print('Essential Matrix')
+    # print(E)
+    #
+    # # use the pixel to image coordinate matrix to compute the fundamental matrix
+    # F = np.matmul(np.matmul(Mpi.T, E), Mpi)
+    # print('Fundamental Matrix:')
+    # print(F)
 
-    # a) Epipolar line
-    pt0 = -np.matmul(np.linalg.inv(H0_wc[:3,:3]),H0_wc[:3,3])
-    if args.bEpilines:
-        # Loop through each sphere center to draw epipolar lines
-        for pt1 in GT_cents:
-            pt1 = pt1[:3]  # Extract the 3-D vector
+    # sx=sy=1
+    Mpi=np.linalg.inv(K.intrinsic_matrix)
+    # now compute matrix which converts iamge coordinates to pixel coordinates
+    # Mip=np.linalg.inv(Mpi)
 
-            # these define the e+0nd points of the line
-            end_pts = [pt0[:], pt1[:]]
-            # use open3D LineSet to create line
-            lines = [[0, 1]]
-            colors = [[1, 0, 0] for i in range(len(lines))]
-            line_set = o3d.geometry.LineSet()
-            line_set.points = o3d.utility.Vector3dVector(end_pts)
-            line_set.lines = o3d.utility.Vector2iVector(lines)
-            line_set.colors = o3d.utility.Vector3dVector(colors)
-            obj_meshes.append(line_set)
-
-    if args.bCentre or args.bEpilines:
-        vis = o3d.visualization.Visualizer()
-        vis.create_window(width=640, height=480, left=0, top=0)
-        for m in obj_meshes:
-            vis.add_geometry(m)
-        vis.run()
-        vis.destroy_window()
-        # b) Extend epipolar line in the image
-        # stack 3-D line points and convert to camera 1 coordinates
-    img = cv2.imread('view1.png')
-    for pt1 in GT_cents:
-        # Convert to camera 1 coordinates
-        pts_cam1 = transform_points(np.array([pt0, pt1[:3]]), H1_wc)
-
-        # Project points into camera 1 image plane and convert to pixel coordinates
-        pts_img1 = []
-        for i in range(pts_cam1.shape[0]):
-            img_pt = f * pts_cam1[i, :] / pts_cam1[i, 2]
-            img_pt = np.matmul(Mip, img_pt[:].reshape(3, 1)).reshape(3,)
-            pts_img1.append(img_pt[:2])
-
-        # Compute pixel coordinates of the line on image edges
-        cam0_centre, sphere_centre = pts_img1
-        slope = (cam0_centre[1] - sphere_centre[1]) / (cam0_centre[0] - sphere_centre[0])
-        left_y = sphere_centre[1] + ((0 - sphere_centre[0]) * slope)
-        left_end_pt = np.array([0, left_y]).astype(int)
-        right_x = -left_y / slope
-        right_end_pt = np.array([right_x, 0]).astype(int)
-
-        # Draw the line in the image
-        img = cv2.circle(img, sphere_centre.astype(int), radius=0, color=(0, 0, 255), thickness=4)
-        img = cv2.line(img, left_end_pt, right_end_pt, (0, 255, 0), 1)
-
-    cv2.imwrite('view1_eline_extend.png', img)
-
-    # c) Draw epipolar line using essential and fundamental matrices
-    # get coordinate transformation from cam1 to cam0
     H_10 = np.matmul(H0_wc, np.linalg.inv(H1_wc))
 
     # this gives P0=R10*P1+T10
-    # hence P1=R10^T(P0-T10)
-    R = H_10[:3, :3].T  # R10^T
-    T = H_10[:3, 3]  # T10
+    # hence P1=R10^T(P0-T10) which is in the same the form as slide 3, lec 2
+    # hence
+    R = H_10[:3, :3].T # R10^T
+    T = H_10[:3, 3] # T10
 
-    # form the cross pdt matrix S from T
+    # now form the cross pdt matrix S from T - slide 9, lec 2
     S = np.array([
         [0, -T[2], T[1]],
         [T[2], 0, -T[0]],
         [-T[1], T[0], 0]
     ])
 
-    # the essential matrix
+    # and hence the essential matrix as per slide 11, lec 2
     E = np.matmul(R, S)
     print('Essential Matrix')
     print(E)
 
-    # use the pixel to image coordinate matrix to compute the fundamental matrix
+    # now use the pixel to image coordinate matrix to compute the
+    # fundamental matrix as per slide 5, lec 3
     F = np.matmul(np.matmul(Mpi.T, E), Mpi)
     print('Fundamental Matrix:')
     print(F)
+    # detected_centers0 = [circle[:2] for circle in circles0[0, :]]
+    # detected_centers1 = [circle[:2] for circle in circles1[0, :]]
 
-    img = cv2.imread('view1_eline_extend.png')
-    for pt1 in GT_cents:
-        pt1_cam0 = transform_points(pt1[:3].reshape(1,3), H0_wc).reshape(3,)
-        pt1_img0 = f * pt1_cam0 / pt1_cam0[2]
-        pt1_img0 = np.matmul(Mip, pt1_img0.reshape(3,1))
+    img = cv2.imread('hough_circles_img1.png')
+    for pt1_img0 in detected_centers0:
+        # Extract center coordinates
+        # x0, y0 = circle
 
-        u = np.matmul(F, pt1_img0).reshape(3,)
+        # Convert to homogeneous coordinates
+        # pt1_img0 = np.array([x0, y0, 1])
 
-        p0 = np.array([0, -f * u[2] / u[1]]).astype(int)
-        p1 = np.array([img_width, -(f * u[2] + u[0] * img_width) / u[1]]).astype(int)
+        # Calculate corresponding epipolar line in image1
+        print(pt1_img0)
+        u = np.matmul(F, pt1_img0)
+        a, b, c = u
+        m = -a/b
+        c = -c/b
 
-        img = cv2.line(img, p0, p1, (255,0,0), 1)
+        # Compute intersections of the epipolar line with the image borders
+        p0 = np.array([0, m*0+c]).astype(int)
+        p1 = np.array([img_width, m*img_width+c]).astype(int)
+        print(p0, p1)
+        # Draw the line in image1
+        img = cv2.line(img, p0, p1, (255, 0, 0), 1)
 
     cv2.imwrite('view1_eline_fmat.png', img)
     ###################################
