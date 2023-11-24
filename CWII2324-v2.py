@@ -304,7 +304,7 @@ if __name__ == '__main__':
     circles0 = detect_circles(img0)
     circles1 = detect_circles(img1)
     detected_centers0 = []
-
+    detected_centers1 = []
     # Process and display the results
     if circles0 is not None:
         circles0 = np.uint16(np.around(circles0))
@@ -322,6 +322,7 @@ if __name__ == '__main__':
             cv2.circle(img1, (i[0], i[1]), i[2], (0, 255, 0), 2)
             # Draw the center of the circle
             cv2.circle(img1, (i[0], i[1]), 2, (0, 0, 255), 3)
+            detected_centers1.append(np.array([i[0], i[1], 1]))
 
     # Save the images with the drawn circles
     cv2.imwrite('hough_circles_img0.png', img0)
@@ -339,76 +340,39 @@ if __name__ == '__main__':
     
     Write your code here
     '''
-    # # Define matrices for coordinate conversion
-    # sx = sy = 1  # Pixel sizes in Open3D are both 1
-    # Mpi = np.array([[sx, 0, -ox / f], [0, sy, -oy / f], [0, 0, 1]])
-    # Mip = np.linalg.inv(Mpi)
-    #
-    # # get coordinate transformation from cam1 to cam0
-    # H_10 = np.matmul(H0_wc, np.linalg.inv(H1_wc))
-    #
-    # # this gives P0=R10*P1+T10
-    # # hence P1=R10^T(P0-T10)
-    # R = H_10[:3, :3].T  # R10^T
-    # T = H_10[:3, 3]  # T10
-    #
-    # # form the cross pdt matrix S from T
-    # S = np.array([
-    #     [0, -T[2], T[1]],
-    #     [T[2], 0, -T[0]],
-    #     [-T[1], T[0], 0]
-    # ])
-    #
-    # # the essential matrix
-    # E = np.matmul(R, S)
-    # print('Essential Matrix')
-    # print(E)
-    #
-    # # use the pixel to image coordinate matrix to compute the fundamental matrix
-    # F = np.matmul(np.matmul(Mpi.T, E), Mpi)
-    # print('Fundamental Matrix:')
-    # print(F)
-
-    # sx=sy=1
     Mpi=np.linalg.inv(K.intrinsic_matrix)
     # now compute matrix which converts iamge coordinates to pixel coordinates
-    # Mip=np.linalg.inv(Mpi)
 
     H_10 = np.matmul(H0_wc, np.linalg.inv(H1_wc))
 
     # this gives P0=R10*P1+T10
-    # hence P1=R10^T(P0-T10) which is in the same the form as slide 3, lec 2
+    # hence P1=R10^T(P0-T10) which is in the same the form
     # hence
     R = H_10[:3, :3].T # R10^T
     T = H_10[:3, 3] # T10
 
-    # now form the cross pdt matrix S from T - slide 9, lec 2
+    # now form the cross pdt matrix S from T
     S = np.array([
         [0, -T[2], T[1]],
         [T[2], 0, -T[0]],
         [-T[1], T[0], 0]
     ])
 
-    # and hence the essential matrix as per slide 11, lec 2
+    # and hence the essential matrix
     E = np.matmul(R, S)
     print('Essential Matrix')
     print(E)
 
-    # now use the pixel to image coordinate matrix to compute the
-    # fundamental matrix as per slide 5, lec 3
+    # now use the pixel to image coordinate matrix to compute the fundamental matrix
     F = np.matmul(np.matmul(Mpi.T, E), Mpi)
     print('Fundamental Matrix:')
     print(F)
     # detected_centers0 = [circle[:2] for circle in circles0[0, :]]
     # detected_centers1 = [circle[:2] for circle in circles1[0, :]]
 
+    epipolar_lines = []
     img = cv2.imread('hough_circles_img1.png')
     for pt1_img0 in detected_centers0:
-        # Extract center coordinates
-        # x0, y0 = circle
-
-        # Convert to homogeneous coordinates
-        # pt1_img0 = np.array([x0, y0, 1])
 
         # Calculate corresponding epipolar line in image1
         print(pt1_img0)
@@ -421,6 +385,9 @@ if __name__ == '__main__':
         p0 = np.array([0, m*0+c]).astype(int)
         p1 = np.array([img_width, m*img_width+c]).astype(int)
         print(p0, p1)
+        # Store the epipolar line points
+        epipolar_lines.append((p0, p1))
+
         # Draw the line in image1
         img = cv2.line(img, p0, p1, (255, 0, 0), 1)
 
@@ -434,37 +401,37 @@ if __name__ == '__main__':
 
     Write your code here
     '''
-    # Detect circles in both images (already done in Task 3)
-    circles0 = detect_circles(img0)
-    circles1 = detect_circles(img1)
+    correspondences = []
 
-    # Extract circle centers
-    centers0 = np.array([(x, y) for (x, y, r) in circles0[0, :]])
-    centers1 = np.array([(x, y) for (x, y, r) in circles1[0, :]])
+    for center0, (p0, p1) in zip(detected_centers0, epipolar_lines):
+        # Create an epipolar line equation: ax + by + c = 0
+        # p0 and p1 are two points on the line
+        line = np.cross(np.append(p0, 1), np.append(p1, 1))
 
-    # Prepare data for RANSAC
-    pairs = []
-    for i, center1 in enumerate(centers1):
-        for j, center0 in enumerate(centers0):
-            pairs.append((i, j))
+        min_distance = float('inf')
+        corresponding_center = None
 
-    # Run RANSAC to find the best correspondences
-    if len(pairs) >= 4:
-        src_pts = np.float32([centers1[i] for (i, j) in pairs]).reshape(-1, 1, 2)
-        dst_pts = np.float32([centers0[j] for (i, j) in pairs]).reshape(-1, 1, 2)
+        for center1 in detected_centers1:
+            # Convert center to homogeneous coordinates
+            point = np.append(center1[:2], 1)
 
-        # Using RANSAC to find the homography matrix
-        H, status = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+            # Check the epipolar constraint: P_R^T F P_L = 0
+            # In this case, line is the equivalent of P_R^T F
+            distance = abs(np.dot(line, point)) / np.linalg.norm(line[:2])
 
-        # Filter out the pairs using the status output
-        good_pairs = [(pairs[i][0], pairs[i][1]) for i in range(len(pairs)) if status[i]]
+            # Find the point with minimum distance to the epipolar line
+            if distance < min_distance:
+                min_distance = distance
+                corresponding_center = center1
 
-        # Print or process the good pairs
-        for i, j in good_pairs:
-            print(f"Circle in view1: {circles1[0, i]}, Corresponding circle in view0: {circles0[0, j]}")
-    else:
-        print("Not enough pairs for RANSAC.")
-    ###################################
+        # If a corresponding center is found, store the correspondence
+        if corresponding_center is not None:
+            correspondences.append((center0, corresponding_center))
+            print(f"Correspondence found: Image 0 Center: {center0}, Image 1 Center: {corresponding_center}")
+    print("\nAll Correspondences:")
+    for corr in correspondences:
+        print(f"Image 0 Center: {corr[0]}, Image 1 Center: {corr[1]}")
+        ###################################
 
 
     ###################################
@@ -480,36 +447,25 @@ if __name__ == '__main__':
 
     reconstructed_centers = []
 
-    for i, j in good_pairs:  # Loop through the good pairs obtained from Task 5
-        # Get the corresponding circle centers
-        pL = centers1[i]
-        pR = centers0[j]
+    for (pL, pR) in correspondences:  # Loop through the good pairs obtained from Task 5
 
         # Convert image points to normalized device coordinates
         pL_n = np.linalg.inv(K_matrix) @ np.array([pL[0], pL[1], 1])
         pR_n = np.linalg.inv(K_matrix) @ np.array([pR[0], pR[1], 1])
 
-        # Get rotation and translation from camera 1 to camera 0
-        R = H0_wc[:3, :3].T  # Transpose of rotation matrix
-        T = H0_wc[:3, 3]  # Translation vector
-
         # Compute cross product
-        pL_cross_pR = np.cross(pL_n, R @ pR_n)
+        pL_cross_pR = np.cross(pL_n, np.matmul(R, pR_n))
 
         # Form the linear system Ax = 0
-        A = np.array([
-            pL_n,  # a*pL
-            -R.T @ pR_n,  # -b*R^T*pR
-            -pL_cross_pR  # -c*(pL x R^T*pR)
-        ]).T
+        A = np.column_stack([pL_n, -np.matmul(R.T, pR_n), -pL_cross_pR])
 
-        b = T  # T vector
+        b = -T.reshape(3, 1)  # Make sure T is a column vector
 
         # Solve the linear system using least squares
-        x, residuals, rank, s = np.linalg.lstsq(A, b, rcond=None)
+        x, _, _, _ = np.linalg.lstsq(A, b, rcond=None)
 
         # a, b, and c are the components of the solution x
-        a, b, c = x
+        a, b, c = x.flatten()  # Flatten in case x is a 2D array
 
         # Reconstruct the 3D point
         X = a * pL_n - c * pL_cross_pR
