@@ -108,7 +108,7 @@ if __name__ == '__main__':
                         help='open up another visualiser to visualise centres')
     parser.add_argument('--coords', dest='bCoords', action='store_true')
 
-    parser.add_argument('--display_epilines', dest='bEpilines', action='store_true',
+    parser.add_argument('--display_spheres', dest='bSpheres', action='store_true',
                         help='Display epipolar lines in the 3D visualizer')
 
     parser.add_argument('--display_centers', dest='bDisplayCenters', action='store_true',
@@ -445,6 +445,9 @@ if __name__ == '__main__':
     # Extract the 3x3 intrinsic matrix from the Open3D PinholeCameraIntrinsic object
     K_matrix = np.array(K.intrinsic_matrix).reshape((3, 3))
 
+    R = H_10[:3, :3].T # R10^T
+    T = H_10[:3, 3] # T10
+
     reconstructed_centers = []
 
     for (pL, pR) in correspondences:  # Loop through the good pairs obtained from Task 5
@@ -452,24 +455,30 @@ if __name__ == '__main__':
         # Convert image points to normalized device coordinates
         pL_n = np.linalg.inv(K_matrix) @ np.array([pL[0], pL[1], 1])
         pR_n = np.linalg.inv(K_matrix) @ np.array([pR[0], pR[1], 1])
+        print(pL_n)
+        print("pR_n", pR_n)
+        print("R",R)
+        print("R.T",R.T)
 
-        # Compute cross product
-        pL_cross_pR = np.cross(pL_n, np.matmul(R, pR_n))
+    # Compute cross product
+        pL_cross_pR = np.cross(pL_n, np.matmul(R.T, pR_n))
 
         # Form the linear system Ax = 0
         A = np.column_stack([pL_n, -np.matmul(R.T, pR_n), -pL_cross_pR])
+        print("T",T)
 
-        b = -T.reshape(3, 1)  # Make sure T is a column vector
+        b = -T  # Make sure T is a column vector
 
         # Solve the linear system using least squares
         x, _, _, _ = np.linalg.lstsq(A, b, rcond=None)
 
         # a, b, and c are the components of the solution x
         a, b, c = x.flatten()  # Flatten in case x is a 2D array
-
+        print("a,b,c",a,b,c)
         # Reconstruct the 3D point
         X = a * pL_n - c * pL_cross_pR
 
+        # X = (a*pL_n + b*np.matmul(R, pR_n) + T)/2
         # Append the reconstructed 3D center to the list
         reconstructed_centers.append(X)
 
@@ -519,6 +528,24 @@ if __name__ == '__main__':
 
     Write your code here
     '''
+    estimated_radii = []
+
+    # Assuming circles0 and reconstructed_centers are available from previous tasks
+    # and 'f' is the focal length used in camera setup
+    for i, circle in enumerate(circles0[0, :]):
+        print(circles0)
+        # Extract the 2D radius
+        radius_2d = circle[2]
+
+        # Extract the corresponding 3D center
+        center_3d = reconstructed_centers[i]
+
+        # Estimate the 3D radius
+        # This assumes the depth of the sphere center is a good approximation for the sphere's radius
+        radius_3d = radius_2d / f * np.linalg.norm(center_3d)
+        estimated_radii.append(radius_3d)
+
+        print(f"Estimated 3D radius for sphere {i}: {radius_3d}")
     ###################################
 
 
@@ -528,6 +555,38 @@ if __name__ == '__main__':
 
     Write your code here:
     '''
+    # Compute radius errors
+    radius_errors = []
+    for gt_rad, est_rad in zip(GT_rads, estimated_radii):
+        error = abs(gt_rad - est_rad)
+        radius_errors.append(error)
+        print(f"Radius Error: {error}")
+
+    # Visualization
+    if args.bSpheres:  # Check if the argument to display spheres is set
+        gt_spheres = []
+        est_spheres = []
+
+        for gt_center, gt_rad, est_center, est_rad in zip(GT_cents, GT_rads, reconstructed_centers, estimated_radii):
+            # Ground Truth Sphere
+            gt_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=gt_rad)
+            gt_sphere.translate(gt_center[:3])
+            gt_sphere.paint_uniform_color([1, 0, 0])  # Red color for ground truth
+            gt_spheres.append(gt_sphere)
+
+            # Estimated Sphere
+            est_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=est_rad)
+            est_sphere.translate(est_center[:3])
+            est_sphere.paint_uniform_color([0, 0, 1])  # Blue color for estimated
+            est_sphere.compute_vertex_normals()
+            est_spheres.append(est_sphere)
+
+        vis = o3d.visualization.Visualizer()
+        vis.create_window(width=640, height=480, left=0, top=0)
+        for sphere in gt_spheres + est_spheres:
+            vis.add_geometry(sphere)
+        vis.run()
+        vis.destroy_window()
     ###################################
 
     ###################################
