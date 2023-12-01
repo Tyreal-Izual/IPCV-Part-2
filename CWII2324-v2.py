@@ -114,6 +114,12 @@ if __name__ == '__main__':
     parser.add_argument('--display_centers', dest='bDisplayCenters', action='store_true',
                         help='Display estimated and ground truth centers in the 3D visualizer')
 
+    # Add arguments for noise levels
+    parser.add_argument('--pos_noise', dest='position_noise_level', type=float, default=0,
+                        help='Noise level for position')
+    parser.add_argument('--orient_noise', dest='orientation_noise_level', type=float, default=0,
+                        help='Noise level for orientation')
+
     args = parser.parse_args()
 
     if args.num<=0:
@@ -329,7 +335,30 @@ if __name__ == '__main__':
     cv2.imwrite('hough_circles_img1.png', img1)
 
     ###################################
+    ###################################
+    '''
+    Task 10: Investigate impact of noise added to relative pose
 
+    Write your code here:
+    '''
+
+    # Introduce noise to the camera poses
+    # Adding position noise
+    position_noise_H0 = np.random.normal(0, args.position_noise_level, 3)
+    position_noise_H1 = np.random.normal(0, args.position_noise_level, 3)
+    H0_wc[:3, 3] += position_noise_H0
+    H1_wc[:3, 3] += position_noise_H1
+
+    # Adding orientation noise
+    orientation_noise_H0 = np.random.normal(0, args.orientation_noise_level, (3, 3))
+    orientation_noise_H1 = np.random.normal(0, args.orientation_noise_level, (3, 3))
+    H0_wc[:3, :3] += orientation_noise_H0
+    H1_wc[:3, :3] += orientation_noise_H1
+
+    # Normalize to maintain orthogonality of rotation matrices
+    H0_wc[:3, :3] /= np.linalg.norm(H0_wc[:3, :3], axis=0)
+    H1_wc[:3, :3] /= np.linalg.norm(H1_wc[:3, :3], axis=0)
+    ###################################
 
     ###################################
     '''
@@ -375,7 +404,7 @@ if __name__ == '__main__':
     for pt1_img0 in detected_centers0:
 
         # Calculate corresponding epipolar line in image1
-        print(pt1_img0)
+        # print(pt1_img0)
         u = np.matmul(F, pt1_img0)
         a, b, c = u
         m = -a/b
@@ -384,7 +413,7 @@ if __name__ == '__main__':
         # Compute intersections of the epipolar line with the image borders
         p0 = np.array([0, m*0+c]).astype(int)
         p1 = np.array([img_width, m*img_width+c]).astype(int)
-        print(p0, p1)
+        # print(p0, p1)
         # Store the epipolar line points
         epipolar_lines.append((p0, p1))
 
@@ -447,25 +476,26 @@ if __name__ == '__main__':
 
     R = H_10[:3, :3].T # R10^T
     T = H_10[:3, 3] # T10
-
+    T = -T #view ->reference to reference->view
     reconstructed_centers = []
-
+   
     for (pL, pR) in correspondences:  # Loop through the good pairs obtained from Task 5
-
+        # print("pl",pL)
+        # print("pr",pR)
         # Convert image points to normalized device coordinates
         pL_n = np.linalg.inv(K_matrix) @ np.array([pL[0], pL[1], 1])
         pR_n = np.linalg.inv(K_matrix) @ np.array([pR[0], pR[1], 1])
-        print(pL_n)
-        print("pR_n", pR_n)
-        print("R",R)
-        print("R.T",R.T)
+        # print(pL_n)
+        # print("pR_n", pR_n)
+        # print("R",R)
+        # print("R.T",R.T)
 
     # Compute cross product
         pL_cross_pR = np.cross(pL_n, np.matmul(R.T, pR_n))
 
         # Form the linear system Ax = 0
         A = np.column_stack([pL_n, -np.matmul(R.T, pR_n), -pL_cross_pR])
-        print("T",T)
+        # print("T",T)
 
         b = -T  # Make sure T is a column vector
 
@@ -474,13 +504,15 @@ if __name__ == '__main__':
 
         # a, b, and c are the components of the solution x
         a, b, c = x.flatten()  # Flatten in case x is a 2D array
-        print("a,b,c",a,b,c)
+        # print("a,b,c",a,b,c)
         # Reconstruct the 3D point
         X = a * pL_n - c * pL_cross_pR
-
-        # X = (a*pL_n + b*np.matmul(R, pR_n) + T)/2
-        # Append the reconstructed 3D center to the list
-        reconstructed_centers.append(X)
+        # print("X: ", X)
+        X = np.append(X, 1)
+        X = np.dot(np.linalg.inv(H0_wc), X)
+       # X = (a*pL_n + b*np.matmul(R.T, pR_n) + T)/2
+       # Append the reconstructed 3D center to the list
+        reconstructed_centers.append(X[:3])
 
     # Print or process the reconstructed centers
     for center in reconstructed_centers:
@@ -508,12 +540,24 @@ if __name__ == '__main__':
             vis.add_geometry(m)
         vis.run()
         vis.destroy_window()
+    # print("GT_cents",GT_cents)
+    # print("reconstructed_centers",reconstructed_centers)
+    
+    # Match the estimated centers with their corresponding ground truth centers
+    # Use the correspondences from Task 5
+    matched_estimated_centers = [None] * len(GT_cents)
+    for i, (center0, _) in enumerate(correspondences):
+        matched_estimated_centers[i] = reconstructed_centers[i]
+    # print("matched_estimated_centers", matched_estimated_centers)
 
-    # Compute errors in sphere centre estimates
+    # Compute errors in sphere centre estimates by matching each estimated center
+    # with the closest ground truth center
     errors = []
-    for gt_center, est_center in zip(GT_cents, reconstructed_centers):
-        error = np.linalg.norm(np.array(gt_center[:3]) - np.array(est_center))
+    for est_center in reconstructed_centers:
+        closest_gt_center = min(GT_cents, key=lambda gt_center: np.linalg.norm(np.array(gt_center[:3]) - np.array(est_center)))
+        error = np.linalg.norm(np.array(closest_gt_center[:3]) - np.array(est_center))
         errors.append(error)
+
 
     # Print or process the errors
     for error in errors:
@@ -533,7 +577,7 @@ if __name__ == '__main__':
     # Assuming circles0 and reconstructed_centers are available from previous tasks
     # and 'f' is the focal length used in camera setup
     for i, circle in enumerate(circles0[0, :]):
-        print(circles0)
+        # print(circles0)
         # Extract the 2D radius
         radius_2d = circle[2]
 
@@ -542,7 +586,13 @@ if __name__ == '__main__':
 
         # Estimate the 3D radius
         # This assumes the depth of the sphere center is a good approximation for the sphere's radius
-        radius_3d = radius_2d / f * np.linalg.norm(center_3d)
+        # print("radius_2d",radius_2d)
+        # print("center_3d",center_3d)
+        # print("f",f)
+        # print("np.linalg.norm(center_3d)",np.linalg.norm(center_3d))
+#        radius_3d = radius_2d / f * np.linalg.norm(center_3d)
+        radius_3d = radius_2d * w / f
+
         estimated_radii.append(radius_3d)
 
         print(f"Estimated 3D radius for sphere {i}: {radius_3d}")
@@ -583,7 +633,7 @@ if __name__ == '__main__':
 
         vis = o3d.visualization.Visualizer()
         vis.create_window(width=640, height=480, left=0, top=0)
-        for sphere in gt_spheres + est_spheres:
+        for sphere in  gt_spheres + est_spheres:
             vis.add_geometry(sphere)
         vis.run()
         vis.destroy_window()
