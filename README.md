@@ -1,4 +1,4 @@
-# README: 3D from Stereo Vision System
+# 3D from Stereo Vision System
 
 ## Overview
 This repository contains a Python-based stereo vision system developed for the "3D from Stereo" project, part of the Image Processing and Computer Vision course at the University of Bristol. The system is designed to perform 3D reconstruction from stereo images using OpenCV and Open3D libraries. It processes stereo images to detect spheres, estimate their positions and radii, and reconstruct their 3D spatial layout. The project emphasizes flexibility through command-line arguments, allowing dynamic adjustments for various parameters.
