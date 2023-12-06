@@ -41,7 +41,7 @@ This repository contains a Python-based stereo vision system developed for the "
    pip3 install opencv-python open3d==0.16.0 numpy
     ```
 
-### For the Mac (Intel & ARM) - Based Machine
+### For the Mac (Intel & ARM)-Based Machine
 You may want to use ```Conda```
 1. Install a virtual environment using conda:  
     ```bash 
@@ -63,7 +63,7 @@ You may want to use ```Conda```
     ```bash
     pip install open3d==0.16.0
     ```
-### For the Windows - Based Machine
+### For the Windows-Based Machine
 You may want to use ```Conda```, recommend use Python 3.8, numpy 1.23.3 and Open3D 0.11.2
 1. Install a virtual environment using conda:
     ```bash 
@@ -152,4 +152,4 @@ you will get the following:
 - **Impact of Noise**: Investigates the effect of noise on the relative pose of cameras in the stereo vision setup, please use ```Command Line Arguments``` to visualize the difference.
 
 ---
-*This README is part of the 3D from Stereo Vision System project, developed as part of the coursework at the University of Bristol.*
+*This README is part of the 3D from Stereo System project, developed as part of the coursework at the University of Bristol.*
