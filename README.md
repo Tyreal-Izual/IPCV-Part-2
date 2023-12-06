@@ -98,7 +98,7 @@ You may want to use ```Conda```, recommend use Python 3.8, numpy 1.23.3 and Open
     ```bash
     python CWII2324-v2.py
     ```
-2. Run the script with custom parameters:
+2. Run the script with custom parameters, for example:
     ```bash
     python CWII2324-v2.py --display_centers
     ```
