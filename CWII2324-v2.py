@@ -574,28 +574,19 @@ if __name__ == '__main__':
     '''
     estimated_radii = []
 
-    # Assuming circles0 and reconstructed_centers are available from previous tasks
-    # and 'f' is the focal length used in camera setup
-    for i, circle in enumerate(circles0[0, :]):
-        # print(circles0)
-        # Extract the 2D radius
-        radius_2d = circle[2]
+    for i in range(len(reconstructed_centers)):
+        # Calculate the distance from the camera to the sphere center
+        d0 = np.linalg.norm(reconstructed_centers[i] - H0_wc[:3, 3])
 
-        # Extract the corresponding 3D center
-        center_3d = reconstructed_centers[i]
+        # Apparent radii from images
+        R_2D = circles0[0][i][2]  # radius from image 1
 
-        # Estimate the 3D radius
-        # This assumes the depth of the sphere center is a good approximation for the sphere's radius
-        # print("radius_2d",radius_2d)
-        # print("center_3d",center_3d)
-        # print("f",f)
-        # print("np.linalg.norm(center_3d)",np.linalg.norm(center_3d))
-#        radius_3d = radius_2d / f * np.linalg.norm(center_3d)
-        radius_3d = radius_2d * w / f
+        # Calculate real radius using similar triangles
+        R_3D = R_2D * d0 / f
 
-        estimated_radii.append(radius_3d)
+        estimated_radii.append(R_3D)
 
-        print(f"Estimated 3D radius for sphere {i}: {radius_3d}")
+        print(f"Estimated 3D radius for sphere {i}: {R_3D}")
     ###################################
 
 
