@@ -153,3 +153,13 @@ you will get the following:
 
 ---
 *This README is part of the 3D from Stereo System project, developed as part of the coursework at the University of Bristol.*
+
+## License
+
+This project is licensed under the [GNU General Public License v3.0](https://www.gnu.org/licenses/).
+
+```bash
+IPCV-CV: 3D from Stereo Vision System  Copyright (C) 2025  Frederick Zou
+```
+
+See the [LICENSE](./LICENSE) file for full details.
